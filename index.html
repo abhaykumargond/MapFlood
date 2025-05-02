@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flood Relief Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .user-marker {
+            width: 20px;
+            height: 20px;
+            background: #1a73e8;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(26, 115, 232, 0.5);
+        }
+        .marker-start {
+            width: 20px;
+            height: 20px;
+            background: #2ecc71;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+        }
+        .marker-end {
+            width: 20px;
+            height: 20px;
+            background: #e74c3c;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+        }
+        .report-form {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            z-index: 1000;
+            width: 90%;
+            max-width: 500px;
+        }
+        .report-form.active {
+            display: block;
+        }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .language-selector {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .stats-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .floating-controls {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            z-index: 1100;
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            padding: 12px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .floating-controls button, .floating-controls select {
+            font-size: 1em;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            background: #f5f7fa;
+            color: #1a73e8;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .floating-controls button:hover, .floating-controls select:hover {
+            background: #e3eafc;
+        }
+        .spinner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #1a73e8;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            z-index: 2000;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg);}
+            100% { transform: translate(-50%, -50%) rotate(360deg);}
+        }
+        @media (max-width: 600px) {
+            .floating-controls {
+                left: 50%;
+                top: 10px;
+                transform: translateX(-50%);
+                flex-direction: row;
+                gap: 8px;
+                padding: 8px 6px;
+            }
+            .container {
+                padding: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Onboarding Tour -->
+        <div id="onboardingTour" class="onboarding-tour">
+            <div class="tour-content">
+                <h3>Welcome to Flood Relief Map</h3>
+                <p>Let's take a quick tour to help you navigate the system effectively.</p>
+                <div class="tour-steps">
+                    <div class="tour-step active" data-step="1">
+                        <img src="https://images.unsplash.com/photo-1561484930-974554019ade?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" alt="Map Overview">
+                        <p>This is the main map showing flood-affected areas and safe locations.</p>
+                    </div>
+                    <div class="tour-step" data-step="2">
+                        <img src="https://images.unsplash.com/photo-1581094794329-c8112c4e0e0f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" alt="Controls">
+                        <p>Use these controls to locate yourself, find safe places, and report floods.</p>
+                    </div>
+                    <div class="tour-step" data-step="3">
+                        <img src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" alt="Emergency Info">
+                        <p>Access emergency contacts and resources here.</p>
+                    </div>
+                </div>
+                <div class="tour-navigation">
+                    <button class="tour-prev">Previous</button>
+                    <button class="tour-next">Next</button>
+                    <button class="tour-skip">Skip Tour</button>
+                </div>
+            </div>
+        </div>
+
+        <header>
+            <div class="header-content">
+                <div class="logo">
+                    <img src="https://yt3.googleusercontent.com/OyU4kTaZERO1-0HPE12g2TLKul4Y_h7Ohr1CVHvuOsg7V9LqGMcb3JyJxKDki8sxek7EJTkTig=s160-c-k-c0x00ffffff-no-rj" alt="Flood Relief Logo">
+                    <h1>Flood Relief Map</h1>
+                </div>
+                <div class="header-controls">
+                    <button id="themeToggle" title="Toggle Theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <select id="languageSelector" title="Select Language">
+                        <option value="en">English</option>
+                        <option value="hi">हिंदी</option>
+                    </select>
+                    <button id="helpButton" title="Get Help">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="map-controls">
+                <button id="locateMe" class="control-button">
+                    <i class="fas fa-location-arrow"></i>
+                    <span>Locate Me</span>
+                </button>
+                <div class="layer-controls">
+                    <button class="layer-button" data-layer="flood">
+                        <i class="fas fa-water"></i>
+                        <span>Flood Zones</span>
+                    </button>
+                    <button class="layer-button" data-layer="shelter">
+                        <i class="fas fa-home"></i>
+                        <span>Shelters</span>
+                    </button>
+                    <button class="layer-button" data-layer="hospital">
+                        <i class="fas fa-hospital"></i>
+                        <span>Hospitals</span>
+                    </button>
+                </div>
+                <button id="reportFlood" class="control-button">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Report Flood</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-panel">
+            <h3>Flood Statistics</h3>
+            <div class="stats-content">
+                <div class="stat-item">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Total Flood Zones</span>
+                        <span class="stat-value" id="totalFloodZones">0</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon">
+                        <i class="fas fa-home"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Available Shelters</span>
+                        <span class="stat-value" id="availableShelters">0</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon">
+                        <i class="fas fa-hospital"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Active Hospitals</span>
+                        <span class="stat-value" id="activeHospitals">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="emergency-info">
+            <h3>Emergency Contacts & Resources</h3>
+            <div class="emergency-content">
+                <div class="emergency-section">
+                    <h4>National Disaster Response Force (NDRF)</h4>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <span>Helpline: 011-24363260</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>Email: ndrf@nic.in</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-globe"></i>
+                        <span>Website: ndrf.gov.in</span>
+                    </div>
+                </div>
+
+                <div class="emergency-section">
+                    <h4>State Disaster Response Force (SDRF)</h4>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <span>Helpline: 1070</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>Email: sdrf@state.gov.in</span>
+                    </div>
+                </div>
+
+                <div class="emergency-section">
+                    <h4>Emergency Services</h4>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <span>Police: 100</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-ambulance"></i>
+                        <span>Ambulance: 108</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-fire"></i>
+                        <span>Fire: 101</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="resource-panel">
+            <h3>Available Resources</h3>
+            <div class="resource-content">
+                <div class="resource-item">
+                    <img src="https://guest-medical.co.uk/wp-content/uploads/2017/06/oasis-water-purification-tablets_800x600.jpg" alt="Water Purification Tablets">
+                    <div class="resource-info">
+                        <h4>Water Purification Tablets</h4>
+                        <p>Available at all relief centers</p>
+                        <span class="resource-status available">Available</span>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <img src="https://uoflhealth.org/wp-content/uploads/2021/11/First-Aid-kit.jpg" alt="First Aid Kit">
+                    <div class="resource-info">
+                        <h4>First Aid Kits</h4>
+                        <p>Medical supplies and basic care</p>
+                        <span class="resource-status available">Available</span>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80" alt="Food">
+                    <div class="resource-info">
+                        <h4>Food Supplies</h4>
+                        <p>Daily meals and dry rations</p>
+                        <span class="resource-status available">Available</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="volunteer-panel">
+            <h3>Volunteer Registration</h3>
+            <div class="volunteer-content">
+                <form id="volunteerForm">
+                    <div class="form-group">
+                        <label for="volunteerName">Full Name</label>
+                        <input type="text" id="volunteerName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="volunteerEmail">Email</label>
+                        <input type="email" id="volunteerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="volunteerPhone">Phone Number</label>
+                        <input type="tel" id="volunteerPhone" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="volunteerSkills">Skills</label>
+                        <select id="volunteerSkills" multiple>
+                            <option value="medical">Medical Assistance</option>
+                            <option value="rescue">Rescue Operations</option>
+                            <option value="logistics">Logistics</option>
+                            <option value="counseling">Counseling</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-user-plus"></i> Register as Volunteer
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="suggestion-box">
+            <h3>Share Your Suggestions</h3>
+            <div class="suggestion-content">
+                <form id="suggestionForm">
+                    <div class="form-group">
+                        <label for="suggestionName">Name (Optional)</label>
+                        <input type="text" id="suggestionName" placeholder="Your name">
+                    </div>
+                    <div class="form-group">
+                        <label for="suggestionEmail">Email (Optional)</label>
+                        <input type="email" id="suggestionEmail" placeholder="Your email">
+                    </div>
+                    <div class="form-group">
+                        <label for="suggestionType">Suggestion Type</label>
+                        <select id="suggestionType">
+                            <option value="improvement">Improvement</option>
+                            <option value="feature">New Feature</option>
+                            <option value="bug">Bug Report</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="suggestionText">Your Suggestion</label>
+                        <textarea id="suggestionText" rows="4" placeholder="Please share your valuable suggestions to help us improve the flood relief system..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="suggestionLocation">Location (Optional)</label>
+                        <input type="text" id="suggestionLocation" placeholder="Location related to your suggestion">
+                    </div>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-paper-plane"></i> Submit Suggestion
+                    </button>
+                </form>
+                <div class="suggestion-thank-you" style="display: none;">
+                    <i class="fas fa-check-circle"></i>
+                    <h4>Thank You!</h4>
+                    <p>Your suggestion has been submitted successfully.</p>
+                    <button class="submit-another-btn">
+                        <i class="fas fa-plus"></i> Submit Another
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Chat Widget -->
+    <div class="help-chat">
+        <button class="chat-toggle">
+            <i class="fas fa-comments"></i>
+        </button>
+        <div class="chat-window">
+            <div class="chat-header">
+                <h4>Help & Support</h4>
+                <button class="close-chat">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="chat-messages">
+                <!-- Chat messages will be added here -->
+            </div>
+            <div class="chat-input">
+                <input type="text" placeholder="Type your message...">
+                <button>
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingSpinner" class="spinner"></div>
+
+    <!-- Report Form -->
+    <div id="reportForm" class="report-form">
+        <h3>Report Flooded Area</h3>
+        <form id="floodReportForm">
+            <div class="form-group">
+                <label for="floodLocation">Location</label>
+                <input type="text" id="floodLocation" readonly>
+            </div>
+            <div class="form-group">
+                <label for="floodSeverity">Severity</label>
+                <select id="floodSeverity">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="floodDescription">Description</label>
+                <textarea id="floodDescription" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="floodPhoto">Upload Photo</label>
+                <input type="file" id="floodPhoto" accept="image/*">
+            </div>
+            <button type="submit">Submit Report</button>
+            <button type="button" id="cancelReport">Cancel</button>
+        </form>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html> 
