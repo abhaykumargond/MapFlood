@@ -1,5 +1,7 @@
 // Initialize Map
-const map = L.map('map').setView([20.5937, 78.9629], 5);
+const map = L.map('map').setView([28.6139, 77.2090], 12);
+
+// Add OpenStreetMap tiles with a custom style
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
@@ -166,72 +168,254 @@ document.getElementById('reportFlood').addEventListener('click', () => {
     }, 1000);
 });
 
-// Update Statistics
+// Sample data for flood-affected areas in Delhi
+const floodZones = [
+    { lat: 28.6139, lng: 77.2090, name: "Yamuna River Flood Zone", severity: "high", description: "Severe flooding along Yamuna River banks" },
+    { lat: 28.7041, lng: 77.1025, name: "North Delhi Flood Zone", severity: "medium", description: "Moderate flooding in residential areas" },
+    { lat: 28.5355, lng: 77.3910, name: "East Delhi Flood Zone", severity: "high", description: "Heavy flooding in low-lying areas" },
+    { lat: 28.4595, lng: 77.0266, name: "South Delhi Flood Zone", severity: "low", description: "Light flooding in some areas" },
+    { lat: 28.6692, lng: 77.4538, name: "East Delhi Flood Zone 2", severity: "medium", description: "Moderate flooding in commercial areas" }
+];
+
+// Sample data for safe locations in Delhi
+const safeLocations = {
+    shelter: [
+        { lat: 28.6139, lng: 77.2090, name: "Yamuna Shelter", capacity: 200, distance: "1.5 km" },
+        { lat: 28.7041, lng: 77.1025, name: "North Delhi Shelter", capacity: 150, distance: "2.3 km" },
+        { lat: 28.5355, lng: 77.3910, name: "East Delhi Shelter", capacity: 180, distance: "1.8 km" },
+        { lat: 28.4595, lng: 77.0266, name: "South Delhi Shelter", capacity: 120, distance: "2.5 km" }
+    ],
+    hospital: [
+        { lat: 28.6139, lng: 77.2090, name: "AIIMS Hospital", beds: 500, distance: "2.1 km" },
+        { lat: 28.7041, lng: 77.1025, name: "Safdarjung Hospital", beds: 400, distance: "2.8 km" },
+        { lat: 28.5355, lng: 77.3910, name: "GTB Hospital", beds: 350, distance: "1.9 km" },
+        { lat: 28.4595, lng: 77.0266, name: "Moolchand Hospital", beds: 300, distance: "2.4 km" }
+    ]
+};
+
+// Create flood zone markers with pulsing effect
+function createFloodMarker(zone) {
+    const severityColors = {
+        high: '#e74c3c',
+        medium: '#f39c12',
+        low: '#f1c40f'
+    };
+    const severitySizes = {
+        high: 20,
+        medium: 15,
+        low: 10
+    };
+    return L.circleMarker([zone.lat, zone.lng], {
+        radius: severitySizes[zone.severity],
+        fillColor: severityColors[zone.severity],
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+        className: 'pulse-flood-marker'
+    }).bindPopup(`
+        <div class="popup-content">
+            <h3>${zone.name}</h3>
+            <p><strong>Severity:</strong> ${zone.severity.toUpperCase()}</p>
+            <p><strong>Description:</strong> ${zone.description}</p>
+            <button onclick="showNearbySafeLocations(${zone.lat}, ${zone.lng})" class="action-button">
+                Show Nearby Safe Locations
+            </button>
+            <button onclick="showEmergencyInfo()" class="action-button">
+                Emergency Information
+            </button>
+        </div>
+    `);
+}
+
+// Create safe location markers
+function createSafeMarker(loc, type) {
+    const color = type === 'shelter' ? '#2ecc71' : '#3498db';
+    const marker = L.circleMarker([loc.lat, loc.lng], {
+        radius: 12,
+        fillColor: color,
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+        className: type === 'shelter' ? 'safe-marker' : 'hospital-marker'
+    });
+
+    const popupContent = `
+        <div class="popup-content">
+            <h3>${loc.name}</h3>
+            <p><strong>Type:</strong> ${type.charAt(0).toUpperCase() + type.slice(1)}</p>
+            <p><strong>${type === 'shelter' ? 'Capacity' : 'Available Beds'}:</strong> 
+                <span class="animated-value" data-value="${type === 'shelter' ? loc.capacity : loc.beds}">
+                    ${type === 'shelter' ? loc.capacity : loc.beds}
+                </span>
+            </p>
+            <p><strong>Distance:</strong> ${loc.distance}</p>
+            <button onclick="showRoute(${loc.lat}, ${loc.lng})" class="action-button">
+                Get Directions
+            </button>
+            <button onclick="show${type === 'shelter' ? 'Shelter' : 'Hospital'}Info()" class="action-button">
+                ${type === 'shelter' ? 'Shelter' : 'Hospital'} Details
+            </button>
+        </div>
+    `;
+
+    marker.bindPopup(popupContent, {
+        maxWidth: 300,
+        minWidth: 250,
+        autoPan: true,
+        closeButton: true,
+        className: 'custom-popup',
+        offset: L.point(0, -10)
+    });
+
+    marker.on('mouseover', function() {
+        this.openPopup();
+        this.setStyle({
+            fillOpacity: 1,
+            radius: 15
+        });
+    });
+
+    marker.on('mouseout', function() {
+        this.setStyle({
+            fillOpacity: 0.8,
+            radius: 12
+        });
+    });
+
+    return marker;
+}
+
+// Initialize markers
+const floodMarkers = floodZones.map(createFloodMarker);
+const safeMarkers = {
+    shelter: safeLocations.shelter.map(loc => createSafeMarker(loc, 'shelter')),
+    hospital: safeLocations.hospital.map(loc => createSafeMarker(loc, 'hospital'))
+};
+
+// Add markers to map
+floodMarkers.forEach(marker => marker.addTo(map));
+Object.values(safeMarkers).flat().forEach(marker => marker.addTo(map));
+
+// Popup animation
+map.on('popupopen', function(e) {
+    const popup = e.popup;
+    const content = popup.getElement();
+    content.style.opacity = '0';
+    content.style.transform = 'scale(0.95) translateY(-20px)';
+    
+    setTimeout(() => {
+        content.style.transition = 'all 0.3s ease-out';
+        content.style.opacity = '1';
+        content.style.transform = 'scale(1) translateY(0)';
+    }, 10);
+});
+
+// Show nearby safe locations
+window.showNearbySafeLocations = function(lat, lng) {
+    Object.values(safeMarkers).flat().forEach(marker => {
+        if (map.hasLayer(marker)) {
+            map.removeLayer(marker);
+        }
+    });
+    Object.values(safeMarkers).flat().forEach(marker => marker.addTo(map));
+    map.setView([lat, lng], 13);
+};
+
+// Show route to location
+window.showRoute = function(lat, lng) {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            const routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(position.coords.latitude, position.coords.longitude),
+                    L.latLng(lat, lng)
+                ],
+                routeWhileDragging: false,
+                show: false,
+                addWaypoints: false,
+                draggableWaypoints: false,
+                fitSelectedRoutes: true,
+                lineOptions: {
+                    styles: [
+                        {color: '#1a73e8', opacity: 0.8, weight: 5},
+                        {color: '#2ecc71', opacity: 0.8, weight: 5, dashArray: '5,10'}
+                    ]
+                },
+                createMarker: function() { return null; }
+            }).addTo(map);
+        });
+    }
+};
+
+// Statistics Animation
+function animateValue(element, start, end, duration) {
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const value = Math.floor(progress * (end - start) + start);
+        element.textContent = value;
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+
+// Update Statistics with Animation
 function updateStatistics() {
-    // Example data - replace with real data from your backend
     const stats = {
-        totalFloodZones: 15,
-        availableShelters: 8,
-        activeHospitals: 5
+        totalFloodZones: floodZones.length,
+        availableShelters: safeLocations.shelter.length,
+        activeHospitals: safeLocations.hospital.length
     };
 
-    document.getElementById('totalFloodZones').textContent = stats.totalFloodZones;
-    document.getElementById('availableShelters').textContent = stats.availableShelters;
-    document.getElementById('activeHospitals').textContent = stats.activeHospitals;
+    const elements = {
+        totalFloodZones: document.getElementById('totalFloodZones'),
+        availableShelters: document.getElementById('availableShelters'),
+        activeHospitals: document.getElementById('activeHospitals')
+    };
+
+    Object.entries(stats).forEach(([key, value]) => {
+        const element = elements[key];
+        const currentValue = parseInt(element.textContent) || 0;
+        animateValue(element, currentValue, value, 1000);
+    });
 }
 
 // Initialize statistics
 updateStatistics();
 
-// Add some example flood zones
-const floodZones = [
-    { lat: 20.5937, lng: 78.9629, severity: 'high' },
-    { lat: 19.0760, lng: 72.8777, severity: 'medium' },
-    { lat: 28.7041, lng: 77.1025, severity: 'low' }
-];
-
-floodZones.forEach(zone => {
-    const marker = L.circleMarker([zone.lat, zone.lng], {
-        radius: 10,
-        color: zone.severity === 'high' ? 'red' : zone.severity === 'medium' ? 'orange' : 'yellow',
-        fillOpacity: 0.5
-    }).addTo(map);
-
-    marker.bindPopup(`Flood Zone<br>Severity: ${zone.severity}`);
+// Update statistics when markers change
+map.on('layeradd layerremove', function() {
+    updateStatistics();
 });
 
-// Add some example shelters
-const shelters = [
-    { lat: 20.5937, lng: 78.9629, name: 'Central Shelter', capacity: 100 },
-    { lat: 19.0760, lng: 72.8777, name: 'West Shelter', capacity: 50 }
-];
+// Report Flood Form
+const reportForm = document.getElementById('reportForm');
+const reportFloodButton = document.getElementById('reportFlood');
+const cancelReportButton = document.getElementById('cancelReport');
 
-shelters.forEach(shelter => {
-    const marker = L.marker([shelter.lat, shelter.lng], {
-        icon: L.divIcon({
-            className: 'shelter-marker',
-            html: '<i class="fas fa-home"></i>',
-            iconSize: [30, 30]
-        })
-    }).addTo(map);
-
-    marker.bindPopup(`Shelter: ${shelter.name}<br>Capacity: ${shelter.capacity}`);
+reportFloodButton.addEventListener('click', function() {
+    reportForm.classList.add('active');
 });
 
-// Add some example hospitals
-const hospitals = [
-    { lat: 28.7041, lng: 77.1025, name: 'City Hospital', beds: 200 },
-    { lat: 19.0760, lng: 72.8777, name: 'West Hospital', beds: 150 }
-];
+cancelReportButton.addEventListener('click', function() {
+    reportForm.classList.remove('active');
+});
 
-hospitals.forEach(hospital => {
-    const marker = L.marker([hospital.lat, hospital.lng], {
-        icon: L.divIcon({
-            className: 'hospital-marker',
-            html: '<i class="fas fa-hospital"></i>',
-            iconSize: [30, 30]
-        })
-    }).addTo(map);
-
-    marker.bindPopup(`Hospital: ${hospital.name}<br>Available Beds: ${hospital.beds}`);
+// Handle flood report submission
+document.getElementById('floodReportForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const location = document.getElementById('floodLocation').value;
+    const severity = document.getElementById('floodSeverity').value;
+    const description = document.getElementById('floodDescription').value;
+    
+    // Here you would typically send the data to your backend
+    console.log('Flood report submitted:', { location, severity, description });
+    
+    // Close the form
+    reportForm.classList.remove('active');
 }); 
