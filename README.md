@@ -80,11 +80,6 @@ cd smart-guard-system
 
 ---
 
-## 📸 Screenshots
-(Add screenshots of your dashboard & MapFlood map here)
-
----
-
 ## 📊 Use Cases
 - **Disaster-Prone Areas** – Early warning & safe evacuation routes  
 - **Government Agencies** – Real-time monitoring and coordination  
